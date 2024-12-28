@@ -138,6 +138,24 @@ func NewEmbeddedReplicaConnector(dbPath string, primaryUrl string, opts ...Optio
 	return openEmbeddedReplicaConnector(dbPath, primaryUrl, authToken, readYourWrites, encryptionKey, syncInterval)
 }
 
+func NewLocalConnector(dbPath string, opts ...Option) (*Connector, error) {
+	var config config
+	errs := make([]error, 0, len(opts))
+	for _, opt := range opts {
+		if err := opt.apply(&config); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if len(errs) > 0 {
+		return nil, errors.Join(errs...)
+	}
+	encryptionKey := ""
+	if config.encryptionKey != nil {
+		encryptionKey = *config.encryptionKey
+	}
+	return openLocalConnector(dbPath, encryptionKey)
+}
+
 type driver struct{}
 
 func (d driver) Open(dbAddress string) (sqldriver.Conn, error) {
@@ -150,7 +168,7 @@ func (d driver) Open(dbAddress string) (sqldriver.Conn, error) {
 
 func (d driver) OpenConnector(dbAddress string) (sqldriver.Connector, error) {
 	if strings.HasPrefix(dbAddress, ":memory:") {
-		return openLocalConnector(dbAddress)
+		return openLocalConnector(dbAddress, "")
 	}
 	u, err := url.Parse(dbAddress)
 	if err != nil {
@@ -158,7 +176,7 @@ func (d driver) OpenConnector(dbAddress string) (sqldriver.Connector, error) {
 	}
 	switch u.Scheme {
 	case "file":
-		return openLocalConnector(dbAddress)
+		return openLocalConnector(dbAddress, "")
 	case "http":
 		fallthrough
 	case "https":
@@ -182,8 +200,8 @@ func libsqlSync(nativeDbPtr C.libsql_database_t) (Replicated, error) {
 	return Replicated{FrameNo: int(rep.frame_no), FramesSynced: int(rep.frames_synced)}, nil
 }
 
-func openLocalConnector(dbPath string) (*Connector, error) {
-	nativeDbPtr, err := libsqlOpenLocal(dbPath, "secret")
+func openLocalConnector(dbPath, encryptionKey string) (*Connector, error) {
+	nativeDbPtr, err := libsqlOpenLocal(dbPath, encryptionKey)
 	if err != nil {
 		return nil, err
 	}
