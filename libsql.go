@@ -54,7 +54,7 @@ type Option interface {
 type option func(*config) error
 
 type Replicated struct {
-	FrameNo int
+	FrameNo      int
 	FramesSynced int
 }
 
@@ -173,7 +173,7 @@ func (d driver) OpenConnector(dbAddress string) (sqldriver.Connector, error) {
 
 func libsqlSync(nativeDbPtr C.libsql_database_t) (Replicated, error) {
 	var errMsg *C.char
-	var rep C.replicated;
+	var rep C.replicated
 	statusCode := C.libsql_sync2(nativeDbPtr, &rep, &errMsg)
 	if statusCode != 0 {
 		return Replicated{0, 0}, libsqlError("failed to sync database ", statusCode, errMsg)
