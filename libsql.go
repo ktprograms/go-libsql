@@ -183,7 +183,7 @@ func libsqlSync(nativeDbPtr C.libsql_database_t) (Replicated, error) {
 }
 
 func openLocalConnector(dbPath string) (*Connector, error) {
-	nativeDbPtr, err := libsqlOpenLocal(dbPath)
+	nativeDbPtr, err := libsqlOpenLocal(dbPath, "secret")
 	if err != nil {
 		return nil, err
 	}
@@ -281,13 +281,18 @@ func libsqlError(message string, statusCode C.int, errMsg *C.char) error {
 	}
 }
 
-func libsqlOpenLocal(dataSourceName string) (C.libsql_database_t, error) {
+func libsqlOpenLocal(dataSourceName, encryptionKey string) (C.libsql_database_t, error) {
 	connectionString := C.CString(dataSourceName)
 	defer C.free(unsafe.Pointer(connectionString))
+	var encrytionKeyNativeString *C.char
+	if encryptionKey != "" {
+		encrytionKeyNativeString = C.CString(encryptionKey)
+		defer C.free(unsafe.Pointer(encrytionKeyNativeString))
+	}
 
 	var db C.libsql_database_t
 	var errMsg *C.char
-	statusCode := C.libsql_open_file(connectionString, &db, &errMsg)
+	statusCode := C.libsql_open_file(connectionString, encrytionKeyNativeString, &db, &errMsg)
 	if statusCode != 0 {
 		return nil, libsqlError(fmt.Sprint("failed to open local database ", dataSourceName), statusCode, errMsg)
 	}
@@ -705,10 +710,15 @@ func (r *rows) Next(dest []sqldriver.Value) error {
 Outerloop:
 	for i := 0; i < count; i++ {
 		var columnType C.int
+		var columnDecltype *C.char
 		var errMsg *C.char
 		statusCode := C.libsql_column_type(r.nativePtr, row, C.int(i), &columnType, &errMsg)
 		if statusCode != 0 {
 			return libsqlError(fmt.Sprint("failed to get column type for index ", i), statusCode, errMsg)
+		}
+		statusCode = C.libsql_column_decltype(r.nativePtr, C.int(i), &columnDecltype, &errMsg)
+		if statusCode != 0 {
+			return libsqlError(fmt.Sprint("failed to get column decltype for index ", i), statusCode, errMsg)
 		}
 
 		switch int(columnType) {
@@ -722,6 +732,9 @@ Outerloop:
 				return libsqlError(fmt.Sprint("failed to get integer for column ", i), statusCode, errMsg)
 			}
 			dest[i] = int64(value)
+			if C.GoString(columnDecltype) == "TIMESTAMP" {
+				dest[i] = time.Unix(int64(value), 0).UTC()
+			}
 		case TYPE_FLOAT:
 			var value C.double
 			var errMsg *C.char
