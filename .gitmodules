@@ -1,0 +1,4 @@
+[submodule "vendor/tursodatabase/libsql"]
+	path = vendor/tursodatabase/libsql
+	url = https://github.com/ktprograms/libsql
+	shallow = true
