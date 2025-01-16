@@ -176,7 +176,7 @@ func (d driver) OpenConnector(dbAddress string) (sqldriver.Connector, error) {
 	}
 	switch u.Scheme {
 	case "file":
-		return openLocalConnector(dbAddress, "")
+		return openLocalConnector(dbAddress, u.Query().Get("key"))
 	case "http":
 		fallthrough
 	case "https":
